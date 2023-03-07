@@ -1,0 +1,138 @@
+---
+title: "NYC Shooting Project"
+author: "SSH"
+date: "2023-02-19"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Peer graded assignment NYPD shooting incident
+
+The objective of this assignment is to test the capability of the student in applying the data science concepts taught and provide effective outcomes.
+
+Step 1:
+Import data from the Server
+
+```{r get_nypd_data}
+library(tidyverse)
+url_in <- "https://data.cityofnewyork.us/api/views/833y-fsy8/"
+file_names <- c("rows.csv")
+urls <- str_c(url_in,file_names)
+```
+
+```{r import_data,message=FALSE}
+NYPD_Shooting <- read_csv(urls)
+```
+ 
+Step 2:
+Tidying the data:
+ Identified the suitable fields for the analysis and removed the unwanted fields. Changed the date fields in accordance with the R suited format.
+ ```{r tidy_NYPD,echo=TRUE}
+ ##Removing the least relevant fields
+ library(tidyr)
+ library(tidyverse)
+ library(lubridate)
+ library(dplyr)
+ library(ggplot2)
+ NYPD_Shooting <- read_csv("https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD")
+ knitr::kable(head(NYPD_Shooting))
+  nypd_cleansed <- drop_na(NYPD_Shooting) %>% select(-c(INCIDENT_KEY, LOCATION_DESC, X_COORD_CD, Y_COORD_CD, Latitude, Longitude, Lon_Lat, JURISDICTION_CODE, OCCUR_TIME))
+  ##Changing the date to the convenience
+  nypd_cleansed <- nypd_cleansed %>% mutate(OCCUR_DATE = mdy(OCCUR_DATE)) 
+  ##Converting the boolean values to integers
+  nypd_cleansed$STATISTICAL_MURDER_FLAG[nypd_cleansed$STATISTICAL_MURDER_FLAG == "TRUE"] <- 1
+  nypd_cleansed$STATISTICAL_MURDER_FLAG[nypd_cleansed$STATISTICAL_MURDER_FLAG == "FALSE"] <- 0
+  nypd_boro <- nypd_cleansed  %>% group_by(BORO, OCCUR_DATE) %>% summarize(STATISTICAL_MURDER_FLAG = STATISTICAL_MURDER_FLAG) %>% select(BORO, OCCUR_DATE, STATISTICAL_MURDER_FLAG) %>% ungroup()
+  nypd_boro$cummurder <- ave(nypd_boro$STATISTICAL_MURDER_FLAG,nypd_boro$BORO,FUN=cumsum)
+  nypd_boro['shooting']=1
+  nypd_boro$cumshooting <- ave(nypd_boro$shooting,nypd_boro$BORO, FUN = cumsum)
+  nypd_boro$murderpercent <- with(nypd_boro, cummurder/cumshooting *100)
+  #show the final data for the anlaysis
+  knitr::kable(head(nypd_boro))
+  ```
+Step 3:
+Data Analysis
+Aggregated the required measures based on the suitable dimensions such as BORO,Date and Flag.
+   ```{r}
+   aggregate(nypd_boro$STATISTICAL_MURDER_FLAG, by=list(BORO = nypd_boro$BORO), FUN=sum)
+aggregate(nypd_boro$shooting, by=list(BORO = nypd_boro$BORO), FUN=sum)
+city <- "BRONX"
+nypd_murder_boro_BRONX <- nypd_boro %>%
+     filter(BORO == city) %>%
+     group_by(BORO, OCCUR_DATE) %>%
+     #summarize(STATISTICAL_MURDER_FLAG = STATISTICAL_MURDER_FLAG) %>%
+     select(BORO, OCCUR_DATE, shooting, cumshooting, STATISTICAL_MURDER_FLAG, cummurder, murderpercent) %>%
+     ungroup()
+knitr::kable(tail(nypd_murder_boro_BRONX))
+city <- "BROOKLYN"
+nypd_murder_boro_BROOKLYN <- nypd_boro %>%
+     filter(BORO == city) %>%
+     group_by(BORO, OCCUR_DATE) %>%
+     #summarize(STATISTICAL_MURDER_FLAG = STATISTICAL_MURDER_FLAG) %>%
+     select(BORO, OCCUR_DATE, shooting, cumshooting, STATISTICAL_MURDER_FLAG, cummurder, murderpercent) %>%
+     ungroup()
+knitr::kable(tail(nypd_murder_boro_BROOKLYN))
+city <- "STATEN ISLAND"
+nypd_murder_boro_STATENISLAND <- nypd_boro %>%
+     filter(BORO == city) %>%
+     group_by(BORO, OCCUR_DATE) %>%
+     #summarize(STATISTICAL_MURDER_FLAG = STATISTICAL_MURDER_FLAG) %>%
+     select(BORO, OCCUR_DATE, shooting, cumshooting, STATISTICAL_MURDER_FLAG, cummurder, murderpercent) %>%
+     ungroup()
+knitr::kable(tail(nypd_murder_boro_STATENISLAND))
+city <- "MANHATTAN"
+nypd_murder_boro_MANHATTAN <- nypd_boro %>%
+     filter(BORO == city) %>%
+     group_by(BORO, OCCUR_DATE) %>%
+     #summarize(STATISTICAL_MURDER_FLAG = STATISTICAL_MURDER_FLAG) %>%
+     select(BORO, OCCUR_DATE, shooting, cumshooting, STATISTICAL_MURDER_FLAG, cummurder, murderpercent) %>%
+     ungroup()
+knitr::kable(tail(nypd_murder_boro_MANHATTAN))
+city <- "QUEENS"
+nypd_murder_boro_QUEENS <- nypd_boro %>%
+     filter(BORO == city) %>%
+     group_by(BORO, OCCUR_DATE) %>%
+     #summarize(STATISTICAL_MURDER_FLAG = STATISTICAL_MURDER_FLAG) %>%
+     select(BORO, OCCUR_DATE, shooting, cumshooting, STATISTICAL_MURDER_FLAG, cummurder, murderpercent) %>%
+     ungroup()
+knitr::kable(tail(nypd_murder_boro_QUEENS))
+```
+Step 4:
+Applying Linear model on the data and Visualization
+   ```{r}
+mod <- lm(cumshooting ~ cummurder, data = nypd_boro)
+summary(mod)
+nypd_boro %>% slice_min(cumshooting)
+nypd_boro %>% slice_max(cumshooting)
+x_grid <- seq(0, 3000)
+new_df <- tibble(cumshooting = x_grid)
+nypd_pred <- nypd_boro %>% mutate(pred = predict(mod))
+# nypd_pred
+nypd_pred %>% ggplot() +
+  geom_point(aes(x = OCCUR_DATE, y=cumshooting), color= "green")+
+  geom_point(aes(x = OCCUR_DATE, y = pred), color = "red")
+
+#Visualization of data
+
+nypd_boro %>%
+  ggplot(aes(x = OCCUR_DATE, y=cummurder, group=BORO, color=BORO))+
+  geom_line()
+nypd_boro %>%
+  ggplot(aes(x = OCCUR_DATE, y=cumshooting, group=BORO, color=BORO))+
+  geom_line()
+nypd_boro %>%
+  ggplot(aes(x = OCCUR_DATE, y=murderpercent, group=BORO, color=BORO))+
+  geom_line()
+```
+Step 5:
+Adding Bias Identification
+Being foreigner I couldn't imagine the incident in the way it happened and that's a potential Bias.I have great fear of shooting and disbelief of the society in which it is carried out.Had to do lot of studies to understand the incident and this could lead me to the way it was portrayed.
+
+ 
+ 
